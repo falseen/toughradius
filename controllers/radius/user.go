@@ -95,7 +95,6 @@ func InitUserRouter() {
 				query = query.Where("radius_user.username like ?", "%"+keyword+"%").
 					Or("radius_user.remark like ?", "%"+keyword+"%").
 					Or("radius_user.realname like ?", "%"+keyword+"%").
-					Or("radius_user.tags like ?", "%"+keyword+"%").
 					Or("radius_user.mobile like ?", "%"+keyword+"%")
 			}
 			return query
