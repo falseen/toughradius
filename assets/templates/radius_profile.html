@@ -37,6 +37,23 @@
                 height: 30,
                 cols: [
                     {
+                        view: "radio",
+                        name: "access_type",
+                        label: tr("radius","AccessType"),
+                        value: "auto",
+                        options: [
+                            { id: "auto", value: "Auto" },
+                            { id: "pppoe", value: "PPPoE" },
+                            { id: "vpn", value: "VPN" },
+                        ],
+                        css: "nborder-input",
+                    },
+                ]
+            },
+            {
+                height: 30,
+                cols: [
+                    {
                         view: "combo",
                         name: "status",
                         label: tr("radius","Status"),
@@ -122,6 +139,18 @@
                                 name: "down_rate",
                                 readonly: true,
                                 label: tr("radius","DownRate (kbps)"),
+                                css: "nborder-input",
+                            },
+                        ]
+                    },
+                    {
+                        height: 30,
+                        cols: [
+                            {
+                                view: "text",
+                                name: "access_type",
+                                readonly: true,
+                                label: tr("radius","AccessType"),
                                 css: "nborder-input",
                             },
                         ]
@@ -296,6 +325,12 @@
                             template: function (obj) {
                                 return Number(obj.down_rate) / 1000
                             },
+                            adjust: true,
+                            sort: "server",
+                        },
+                        {
+                            id: "access_type",
+                            header: [tr("radius","AccessType")],
                             adjust: true,
                             sort: "server",
                         },

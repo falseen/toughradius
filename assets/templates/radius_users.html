@@ -28,6 +28,18 @@
                 css: "nborder-input",
             },
             {
+                view: "radio",
+                name: "access_type",
+                label: tr("radius","AccessType"),
+                value: "auto",
+                options: [
+                    { id: "auto", value: "Auto" },
+                    { id: "pppoe", value: "PPPoE" },
+                    { id: "vpn", value: "VPN" },
+                ],
+                css: "nborder-input",
+            },
+            {
                 cols: [
                     {
                         view: "datepicker",
@@ -212,6 +224,13 @@
                                                 value: "enabled",
                                                 options: ["enabled", "disabled"],
                                                 validate: webix.rules.isNotEmpty,
+                                                css: "nborder-input"
+                                            },
+                                            {
+                                                view: "text",
+                                                name: "access_type",
+                                                label: tr("radius","AccessType"),
+                                                readonly: true,
                                                 css: "nborder-input"
                                             },
                                         ],
@@ -547,6 +566,12 @@
                             header: [gtr("Status")],
                             sort: "server",
                             adjust: true
+                        },
+                        {
+                            id: "access_type",
+                            header: [tr("radius","AccessType")],
+                            adjust: true,
+                            sort: "server",
                         },
                         {
                             id: "expire_time",

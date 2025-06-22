@@ -106,10 +106,11 @@ func InitProfileRouter() {
 		common.CheckEmpty("name", form.Name)
 		common.Must(app.GDB().Save(form).Error)
 		common.Must(app.GDB().Model(&models.RadiusUser{}).Where("profile_id=?", form.ID).Updates(map[string]interface{}{
-			"addr_pool":  form.AddrPool,
-			"active_num": form.ActiveNum,
-			"up_rate":    form.UpRate,
-			"down_rate":  form.DownRate,
+			"addr_pool":   form.AddrPool,
+			"active_num":  form.ActiveNum,
+			"up_rate":     form.UpRate,
+			"down_rate":   form.DownRate,
+			"access_type": form.AccessType,
 		}).Error)
 		webserver.PubOpLog(c, fmt.Sprintf("更新RADIUS策略：%v", form))
 		return c.JSON(http.StatusOK, web.RestSucc("success"))

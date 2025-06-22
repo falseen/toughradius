@@ -132,7 +132,16 @@ func InitUserRouter() {
 		var count int64 = 0
 		app.GDB().Model(models.RadiusUser{}).Where("username=?", form.Username).Count(&count)
 		if count > 0 {
-			return c.JSON(http.StatusOK, web.RestError("Username already exists"))
+			return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "Username %s already exists"), form.Username)))
+		}
+
+		// Check duplicate IP in the same profile when IP is specified
+		if strings.TrimSpace(form.IpAddr) != "" {
+			var ipcnt int64
+			app.GDB().Model(models.RadiusUser{}).Where("profile_id = ? and ip_addr = ?", form.ProfileId, form.IpAddr).Count(&ipcnt)
+			if ipcnt > 0 {
+				return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "IP address %s already exists in the current profile"), form.IpAddr)))
+			}
 		}
 
 		var profile models.RadiusProfile
@@ -142,6 +151,10 @@ func InitUserRouter() {
 		form.UpRate = profile.UpRate
 		form.DownRate = profile.DownRate
 		form.AddrPool = profile.AddrPool
+		// 接入类型继承策略，除非前端显式指定
+		if strings.TrimSpace(form.AccessType) == "" {
+			form.AccessType = profile.AccessType
+		}
 
 		common.Must(app.GDB().Create(form).Error)
 		webserver.PubOpLog(c, fmt.Sprintf("Create RADIUS user：%v", form))
@@ -161,6 +174,9 @@ func InitUserRouter() {
 		form.UpRate = profile.UpRate
 		form.DownRate = profile.DownRate
 		form.AddrPool = profile.AddrPool
+		if strings.TrimSpace(form.AccessType) == "" {
+			form.AccessType = profile.AccessType
+		}
 
 		common.Must(app.GDB().Save(form).Error)
 		webserver.PubOpLog(c, fmt.Sprintf("Update RADIUS users：%v", form))
@@ -205,6 +221,7 @@ func InitUserRouter() {
 				data["up_rate"] = profile.UpRate
 				data["down_rate"] = profile.DownRate
 				data["addr_pool"] = profile.AddrPool
+				data["access_type"] = profile.AccessType
 			}
 			if common.InSlice(status, []string{"enabled", "disabled"}) {
 				data["status"] = status
@@ -231,11 +248,82 @@ func InitUserRouter() {
 	})
 
 	webserver.POST("/admin/radius/users/import", func(c echo.Context) error {
-		datas, err := webserver.ImportData(c, "radius_users")
-		common.Must(err)
-		common.Must(app.GDB().Model(models.RadiusUser{}).Clauses(clause.OnConflict{
+		// 解析上传文件，得到 []map[string]interface{}
+		rawRows, err := webserver.ImportData(c, "radius_users")
+		if err != nil {
+			return c.JSON(http.StatusOK, web.RestError(err.Error()))
+		}
+
+		var users []models.RadiusUser
+		for _, row := range rawRows {
+			// 将表头统一转为小写，解决 Excel 首字母大写/全大写等问题
+			lc := make(map[string]interface{}, len(row))
+			for k, v := range row {
+				lc[strings.ToLower(strings.TrimSpace(k))] = v
+			}
+
+			// 如果 id 缺失，用雪花算法补一个，确保主键存在且类型正确
+			var uid int64
+			if vid, ok := lc["id"]; ok {
+				uid = cast.ToInt64(vid)
+			} else {
+				uid = common.UUIDint64()
+			}
+
+			username := strings.ToLower(strings.TrimSpace(cast.ToString(lc["username"])))
+			if username == "" {
+				// 用户名必填，跳过空行
+				continue
+			}
+
+			// 基本字段直接类型转换即可
+			user := models.RadiusUser{
+				ID:         uid,
+				NodeId:     cast.ToInt64(lc["nodeid"]),
+				ProfileId:  cast.ToInt64(lc["profileid"]),
+				Realname:   cast.ToString(lc["realname"]),
+				Mobile:     cast.ToString(lc["mobile"]),
+				Username:   username,
+				Password:   cast.ToString(lc["password"]),
+				AddrPool:   cast.ToString(lc["addrpool"]),
+				ActiveNum:  cast.ToInt(lc["activenum"]),
+				UpRate:     cast.ToInt(lc["uprate"]),
+				DownRate:   cast.ToInt(lc["downrate"]),
+				Vlanid1:    cast.ToInt(lc["vlanid1"]),
+				Vlanid2:    cast.ToInt(lc["vlanid2"]),
+				IpAddr:     cast.ToString(lc["ipaddr"]),
+				MacAddr:    cast.ToString(lc["macaddr"]),
+				BindVlan:   cast.ToInt(lc["bindvlan"]),
+				BindMac:    cast.ToInt(lc["bindmac"]),
+				Status:     cast.ToString(lc["status"]),
+				Remark:     cast.ToString(lc["remark"]),
+				AccessType: cast.ToString(lc["accesstype"]),
+			}
+
+			// 解析过期时间，允许空
+			if v := cast.ToString(lc["expiretime"]); strings.TrimSpace(v) != "" {
+				if t, err := time.Parse("2006-01-02", v[:10]); err == nil {
+					user.ExpireTime = t
+				}
+			}
+
+			// 如果 AccessType 为空，让它继承 profile 策略时再填充
+
+			users = append(users, user)
+		}
+
+		if len(users) == 0 {
+			return c.JSON(http.StatusOK, web.RestError("no valid rows"))
+		}
+
+		// 使用 OnConflict(username) 做 upsert，保持与旧逻辑一致
+		if err := app.GDB().Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "username"}},
 			UpdateAll: true,
-		}).Create(datas).Error)
+		}).Create(&users).Error; err != nil {
+			return c.JSON(http.StatusOK, web.RestError(err.Error()))
+		}
+
 		return c.JSON(http.StatusOK, web.RestSucc("Success"))
 	})
 
@@ -243,44 +331,66 @@ func InitUserRouter() {
 		datas, err := webserver.ImportData(c, "radius_users")
 		common.Must(err)
 		var unames []string
-		var unames2 []string
+		var unames2 []string // track duplicate usernames within current import
+		var ips2 []string    // track duplicate ip addresses within current import (profile_id:ip)
 		app.GDB().Model(models.RadiusUser{}).Pluck("username", &unames)
 		var users []models.RadiusUser
 		for row, data := range datas {
-			username := strings.ToLower(strings.TrimSpace(cast.ToString(data["username"])))
+			// 将列名统一转为小写，兼容 Excel 表头大小写差异
+			lc := make(map[string]interface{}, len(data))
+			for k, v := range data {
+				lc[strings.ToLower(strings.TrimSpace(k))] = v
+			}
+
+			username := strings.ToLower(strings.TrimSpace(cast.ToString(lc["username"])))
 			if common.InSlice(username, unames) {
-				return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf("row %d username %s exists", row+1, username)))
+				return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "row %d username %s already exists"), row+1, username)))
 			}
 			if common.InSlice(username, unames2) {
-				return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf("row %d username %s duplicate", row+1, username)))
+				return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "row %d username %s duplicate within import file"), row+1, username)))
 			}
 			unames2 = append(unames2, username)
-			password := cast.ToString(data["password"])
-			expire := cast.ToString(data["expire_time"])
-			mobile := cast.ToString(data["mobile"])
-			remark := cast.ToString(data["remark"])
-			realname := strings.TrimSpace(cast.ToString(data["realname"]))
+			password := cast.ToString(lc["password"])
+			expire := cast.ToString(lc["expiretime"])
+			mobile := cast.ToString(lc["mobile"])
+			remark := cast.ToString(lc["remark"])
+			realname := strings.TrimSpace(cast.ToString(lc["realname"]))
 			if realname == "" {
 				realname = username
 			}
 			common.CheckEmpty("username", username)
 			common.CheckEmpty("password", password)
 			common.CheckEmpty("expire_time", expire)
-			profileName := cast.ToString(data["profile"])
+			profileName := cast.ToString(lc["profile"])
 			if profileName == "" {
-				return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf("行 %d customer or profile is empty", row+1)))
+				return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "row %d customer or profile is empty"), row+1)))
 			}
 			var profile models.RadiusProfile
 			err := app.GDB().Where("name=?", profileName).First(&profile).Error
 			if err != nil {
-				return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf("row %d  Profile：%s does not exist", row+1, profileName)))
+				return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "row %d  Profile：%s does not exist"), row+1, profileName)))
 			}
 			expireTime, err := time.Parse("2006-01-02", expire)
 			if err != nil {
 				expireTime, err = time.Parse("2006/01/02", expire)
 				if err != nil {
-					return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf("row %d Expiration time format error：%s", row+1, expire)))
+					return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "row %d Expiration time format error：%s"), row+1, expire)))
 				}
+			}
+			ipAddr := strings.TrimSpace(cast.ToString(lc["ipaddr"]))
+			// Validate duplicate IP in DB for this profile
+			if ipAddr != "" {
+				var ipCnt int64
+				app.GDB().Model(models.RadiusUser{}).Where("profile_id = ? and ip_addr = ?", profile.ID, ipAddr).Count(&ipCnt)
+				if ipCnt > 0 {
+					return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "row %d ip %s already exists in profile %s"), row+1, ipAddr, profile.Name)))
+				}
+				// Validate duplicate IP within current import batch
+				var profileIpKey = fmt.Sprintf("%d:%s", profile.ID, ipAddr)
+				if common.InSlice(profileIpKey, ips2) {
+					return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "row %d ip %s duplicate within import file for profile %s"), row+1, ipAddr, profile.Name)))
+				}
+				ips2 = append(ips2, profileIpKey)
 			}
 			user := models.RadiusUser{
 				ID:          common.UUIDint64(),
@@ -294,7 +404,8 @@ func InitUserRouter() {
 				ActiveNum:   profile.ActiveNum,
 				UpRate:      profile.UpRate,
 				DownRate:    profile.DownRate,
-				IpAddr:      "",
+				AccessType:  profile.AccessType,
+				IpAddr:      ipAddr,
 				ExpireTime:  expireTime,
 				Status:      "enabled",
 				Remark:      remark,
