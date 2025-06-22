@@ -9,7 +9,6 @@ import (
 	"os"
 	"path"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,7 +18,7 @@ import (
 	"github.com/gocarina/gocsv"
 	_ "github.com/gocarina/gocsv"
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/labstack/echo-jwt/v4"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/spf13/cast"
 	"github.com/talkincode/toughradius/v8/app"
 	"github.com/talkincode/toughradius/v8/assets"
@@ -340,7 +339,7 @@ func ImportData(c echo.Context, sheet string) ([]map[string]interface{}, error) 
 			_id, ok = item["Id"]
 		}
 		if !ok || common.IsEmptyOrNA(cast.ToString(_id)) {
-			item["id"] = strconv.FormatInt(common.UUIDint64(), 10)
+			item["id"] = common.UUIDint64()
 		}
 		datas = append(datas, item)
 	}

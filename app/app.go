@@ -110,6 +110,8 @@ func (a *Application) Init(cfg *config.AppConfig) {
 
 	a.cwmpTable = NewCwmpEventTable()
 	a.initJob()
+	// built-in translations
+	a.initBuiltinTrans()
 	a.RenderTranslateFiles()
 }
 
