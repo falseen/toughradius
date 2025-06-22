@@ -454,3 +454,26 @@ func (s *RadiusService) DeleteEapState(stateid string) {
 	defer s.eaplock.Unlock()
 	delete(s.EapStateCache, stateid)
 }
+
+// CheckAccessType 根据用户配置判断接入方式是否匹配（pppoe / vpn / auto）
+// nasPortType 取自 RADIUS 报文 NAS-Port-Type 的数值（RFC2865/61）。
+// PPPoE -> 15(Ethernet)，VPN(L2TP/PPTP/OVPN 等) -> 5(Virtual)。
+func (s *RadiusService) CheckAccessType(cfg string, nasPortType int) error {
+	atype := strings.ToLower(strings.TrimSpace(cfg))
+	if atype == "" || atype == "auto" {
+		return nil // 不限制
+	}
+	var actual string
+	switch nasPortType {
+	case 15:
+		actual = "pppoe"
+	case 5:
+		actual = "vpn"
+	default:
+		actual = fmt.Sprintf("%d", nasPortType)
+	}
+	if actual != atype {
+		return fmt.Errorf("access_type mismatch: want %s, got %s", atype, actual)
+	}
+	return nil
+}

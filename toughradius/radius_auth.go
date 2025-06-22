@@ -164,6 +164,10 @@ func (s *AuthService) ServeRADIUS(w radius.ResponseWriter, r *radius.Request) {
 		s.CheckRadAuthError(username, ip, s.CheckVlanBind(user, vendorReq))
 	}
 
+	// AccessType 校验：pppoe / vpn / auto
+	nasPortType := int(rfc2865.NASPortType_Get(r.Packet))
+	s.CheckRadAuthError(username, ip, s.CheckAccessType(user.AccessType, nasPortType))
+
 	sendAccept := func() {
 		if isEap {
 			eapSuccess := NewEAPSuccess(r.Identifier)
