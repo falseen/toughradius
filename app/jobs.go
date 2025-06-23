@@ -48,6 +48,10 @@ func (a *Application) initJob() {
 				Add(-time.Hour*24*365)).Delete(models.SysOprLog{})
 	})
 
+	_, err = a.sched.AddFunc("@every 5m", func() {
+		a.SchedClearExpireData()
+	})
+
 	if err != nil {
 		log.Errorf("init job error %s", err.Error())
 	}
@@ -165,8 +169,12 @@ func (a *Application) SchedClearExpireData() {
 		}
 	}()
 	// Clean expire online
+	expireSeconds := cast.ToInt(a.GetSettingsStringValue("radius", ConfigRadiusOnlineExpireSeconds))
+	if expireSeconds == 0 {
+		expireSeconds = 300 // 默认 5 分钟
+	}
 	a.gormDB.Where("last_update <= ?",
-		time.Now().Add(time.Second*300*-1)).
+		time.Now().Add(-time.Second*time.Duration(expireSeconds))).
 		Delete(&models.RadiusOnline{})
 
 	// Clean up accounting logs

@@ -107,6 +107,10 @@ settingsUi.getRadiusConfigView = function (citem) {
                         bottomLabel: tr("settings", "Radius logging expire days, set according to the disk size. ")
                     },
                     {
+                        view: "counter", name: "OnlineExpireSeconds", labelPosition: "top", label: tr("settings", "Online record expire seconds"),
+                        bottomLabel: tr("settings", "Delete online record if last update exceeds this value (seconds)")
+                    },
+                    {
                         view: "radio", name: "RadiusEapMethod", labelPosition: "top", label: tr("settings", "EAP certification methodology"),
                         options: ["noeap","eap-md5", "eap-mschapv2", "eap-otp"],
                         bottomLabel: tr("settings", "eap certification methodology")

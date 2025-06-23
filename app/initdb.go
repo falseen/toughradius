@@ -61,7 +61,8 @@ func (a *Application) checkSettings() {
 			checkConfig(sortid, "radius", ConfigRadiusAcctInterimInterval, "disabled", "Radius default Acctounting interim interval")
 		case ConfigRadiusEapMethod:
 			checkConfig(sortid, "radius", ConfigRadiusEapMethod, "eap-md5", "Radius eap method")
-
+		case ConfigRadiusOnlineExpireSeconds:
+			checkConfig(sortid, "radius", ConfigRadiusOnlineExpireSeconds, "300", "Radius online record expire seconds, default 300s")
 		}
 	}
 }

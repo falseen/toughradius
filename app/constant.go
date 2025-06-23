@@ -10,6 +10,7 @@ const (
 	ConfigRadiusAccountingHistoryDays = "AccountingHistoryDays"
 	ConfigRadiusAcctInterimInterval   = "AcctInterimInterval"
 	ConfigRadiusEapMethod             = "RadiusEapMethod"
+	ConfigRadiusOnlineExpireSeconds   = "OnlineExpireSeconds"
 
 	ConfigTR069AccessAddress           = "TR069AccessAddress"
 	ConfigTR069AccessPassword          = "TR069AccessPassword"
@@ -41,4 +42,5 @@ var ConfigConstants = []string{
 	ConfigRadiusAccountingHistoryDays,
 	ConfigRadiusAcctInterimInterval,
 	ConfigRadiusEapMethod,
+	ConfigRadiusOnlineExpireSeconds,
 }
