@@ -13,8 +13,12 @@ func (a *Application) initBuiltinTrans() {
 	a.TranslateUpdate(ZhCN, "radius", "row %d Expiration time format error：%s", "第 %d 行 过期时间格式错误：%s")
 	a.TranslateUpdate(ZhCN, "radius", "row %d ip %s already exists in profile %s", "第 %d 行 IP %s 在策略 %s 中已存在")
 	a.TranslateUpdate(ZhCN, "radius", "row %d ip %s duplicate within import file for profile %s", "第 %d 行 IP %s 在导入文件中于策略 %s 重复")
+	a.TranslateUpdate(ZhCN, "radius", "row %d ip %s already exists in DB", "第 %d 行 IP %s 已存在")
+	a.TranslateUpdate(ZhCN, "radius", "row %d ip %s duplicate within import file", "第 %d 行 IP %s 在导入文件中重复")
 	a.TranslateUpdate(ZhCN, "radius", "AccessType", "账号类型")
 	a.TranslateUpdate(ZhCN, "radius", "Auto", "自动")
 	a.TranslateUpdate(ZhCN, "radius", "PPPoE", "PPPoE")
 	a.TranslateUpdate(ZhCN, "radius", "VPN", "VPN")
+	a.TranslateUpdate(ZhCN, "settings", "Online record expire seconds", "在线记录过期秒数")
+	a.TranslateUpdate(ZhCN, "settings", "Delete online record if last update exceeds this value (seconds)", "当在线记录最后更新时间超过此秒数即判定离线")
 }
