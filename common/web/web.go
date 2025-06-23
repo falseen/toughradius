@@ -255,6 +255,7 @@ type WebRestResult struct {
 	Msgtype string      `json:"msgtype"`
 	Msg     string      `json:"msg"`
 	Data    interface{} `json:"data"`
+	Status  string      `json:"status"` // for Webix Uploader callback
 }
 
 func RestResult(data interface{}) *WebRestResult {
@@ -263,13 +264,16 @@ func RestResult(data interface{}) *WebRestResult {
 		Msgtype: "info",
 		Msg:     "success",
 		Data:    data,
+		Status:  "server",
 	}
 }
+
 func RestSucc(msg string) *WebRestResult {
 	return &WebRestResult{
 		Code:    0,
 		Msgtype: "info",
 		Msg:     msg,
+		Status:  "server",
 	}
 }
 
@@ -278,6 +282,7 @@ func RestError(msg string) *WebRestResult {
 		Code:    1,
 		Msgtype: "error",
 		Msg:     msg,
+		Status:  "error",
 	}
 }
 
@@ -286,21 +291,44 @@ func ReadImportExcelData(src io.Reader, sheet string) ([]map[string]interface{},
 	if err != nil {
 		return nil, err
 	}
-	// 获取 Sheet1 上所有单元格
+
+	// 如果未指定 Sheet，或指定的 Sheet 在工作簿中不存在，则退回到第一个 Sheet
+	sheetExists := false
+	for _, name := range f.GetSheetMap() {
+		if sheet == name {
+			sheetExists = true
+			break
+		}
+	}
+	if sheet == "" || !sheetExists {
+		for _, name := range f.GetSheetMap() {
+			sheet = name
+			break // first sheet
+		}
+		if sheet == "" {
+			return nil, errors.New("excel no sheets found")
+		}
+	}
+
+	// 获取对应 Sheet 中所有单元格
 	rows := f.GetRows(sheet)
+	if len(rows) == 0 {
+		return nil, errors.New("excel sheet is empty")
+	}
+
 	head := make(map[int]string)
 	var data []map[string]interface{}
 	for i, row := range rows {
 		item := make(map[string]interface{})
 		for k, colCell := range row {
 			if i == 0 {
-				head[k] = colCell
+				head[k] = strings.TrimSpace(colCell)
 			} else {
-				item[head[k]] = colCell
+				item[strings.TrimSpace(head[k])] = strings.TrimSpace(colCell)
 			}
 		}
 		if i == 0 {
-			continue
+			continue // skip header row
 		}
 		data = append(data, item)
 	}

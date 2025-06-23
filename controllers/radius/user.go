@@ -254,8 +254,20 @@ func InitUserRouter() {
 			return c.JSON(http.StatusOK, web.RestError(err.Error()))
 		}
 
+		// 1) 从数据库取出已存在的用户名，做大小写无关比较
+		var dbNames []string
+		app.GDB().Model(models.RadiusUser{}).Pluck("username", &dbNames)
+		dbNameSet := make(map[string]struct{}, len(dbNames))
+		for _, n := range dbNames {
+			dbNameSet[strings.ToLower(strings.TrimSpace(n))] = struct{}{}
+		}
+
+		// 用来记录本次导入文件中出现过的用户名、(profile_id,ip) 组合
+		fileNameSet := make(map[string]struct{})
+		fileIpSet := make(map[string]struct{})
+
 		var users []models.RadiusUser
-		for _, row := range rawRows {
+		for idx, row := range rawRows {
 			// 将表头统一转为小写，解决 Excel 首字母大写/全大写等问题
 			lc := make(map[string]interface{}, len(row))
 			for k, v := range row {
@@ -275,6 +287,15 @@ func InitUserRouter() {
 				// 用户名必填，跳过空行
 				continue
 			}
+
+			// === 用户名重复校验 ===
+			if _, ok := dbNameSet[username]; ok {
+				return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "row %d username %s already exists"), idx+1, username)))
+			}
+			if _, ok := fileNameSet[username]; ok {
+				return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "row %d username %s duplicate within import file"), idx+1, username)))
+			}
+			fileNameSet[username] = struct{}{}
 
 			// 基本字段直接类型转换即可
 			user := models.RadiusUser{
@@ -305,6 +326,21 @@ func InitUserRouter() {
 				if t, err := time.Parse("2006-01-02", v[:10]); err == nil {
 					user.ExpireTime = t
 				}
+			}
+
+			// === IP 重复校验 ===
+			if user.IpAddr != "" {
+				// DB 中是否已存在同 profile_id + ip
+				var cnt int64
+				app.GDB().Model(models.RadiusUser{}).Where("profile_id = ? AND ip_addr = ?", user.ProfileId, user.IpAddr).Count(&cnt)
+				if cnt > 0 {
+					return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "row %d ip %s already exists in DB"), idx+1, user.IpAddr)))
+				}
+				key := fmt.Sprintf("%d:%s", user.ProfileId, user.IpAddr)
+				if _, ok := fileIpSet[key]; ok {
+					return c.JSON(http.StatusOK, web.RestError(fmt.Sprintf(app.Trans("radius", "row %d ip %s duplicate within import file"), idx+1, user.IpAddr)))
+				}
+				fileIpSet[key] = struct{}{}
 			}
 
 			// 如果 AccessType 为空，让它继承 profile 策略时再填充
